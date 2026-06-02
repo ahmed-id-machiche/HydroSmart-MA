@@ -1,3 +1,4 @@
+
 # HydroSmart
 
 HydroSmart est un projet de gestion agricole centré sur l'irrigation intelligente. Le depot contient deux applications qui partagent la meme logique metier et la meme base de donnees:
@@ -309,3 +310,6 @@ Relations principales:
 Install lefleat pour le map dans dashboard
 npm install leaflet
 npm install -D @types/leaflet
+=======
+# HydroSmart-MA
+>>>>>>> f3381b2c20b3a5b999a538e3663c4a93af212276
