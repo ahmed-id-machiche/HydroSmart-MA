@@ -307,9 +307,28 @@ Relations principales:
 - documenter le schema Supabase avec un fichier SQL ou un diagramme de donnees
 - ajouter des tests sur le calcul de `ET0` et le moteur d'irrigation
 
-Install lefleat pour le map dans dashboard
+Install leaflet pour le map dans dashboard
 npm install leaflet
 npm install -D @types/leaflet
-=======
-# HydroSmart-MA
->>>>>>> f3381b2c20b3a5b999a538e3663c4a93af212276
+
+## Amélioration Scientifique : API Agro Monitoring & Datasets FAO-56
+
+Afin d'améliorer la précision des recommandations d'irrigation en temps réel, le moteur de calcul a été doté d'une intégration d'images satellites et de données pédoclimatiques scientifiques :
+
+### 1. Nouveaux Fichiers & Librairies
+*   **`Web/app/lib/datasets.ts`** : Contient un dataset basé sur les normes **FAO-56** adapté au Maroc (région Souss-Massa) pour les types de sols (Sableux, Argileux, Limoneux...) et les cultures (Tomates, Oliviers, Agrumes, Menthe...). Il définit la capacité au champ ($FC$), le point de flétrissement ($PWP$), la profondeur racinaire ($Z_r$), la fraction de déplétion admissible ($p$), et l'efficacité d'irrigation ($\eta$).
+*   **`Web/app/lib/agromonitoring.ts`** : Bibliothèque cliente pour l'API **Agro Monitoring**. Elle génère automatiquement un polygone de 1 hectare autour de la coordonnée GPS d'une parcelle, l'enregistre sur l'API, puis récupère en direct l'**NDVI** et l'**Humidité du sol** par satellite (Sentinel-2).
+
+### 2. Logique Scientifique Modifiée (`irrigation-engine.ts`)
+*   **$K_c$ Dynamique via NDVI :** Le coefficient cultural ($K_c$) n'est plus statique. Il est estimé en direct à partir de la vigueur de la plante mesurée par satellite via la formule :
+    $$K_c = 1.25 \times NDVI + 0.2$$
+*   **Modèle de Bilan Hydrique du Sol :** L'humidité du sol en temps réel ($SM$) mesurée par satellite permet de calculer l'épuisement de l'eau dans la zone racinaire ($D_r = 1000 \times (FC - SM) \times Z_r$). L'irrigation n'est recommandée que si l'épuisement dépasse la réserve facilement utilisable ($RAW$).
+*   **Durée et Fréquence Dynamiques :** La durée d'arrosage est calculée en fonction du débit typique des goutteurs (ex. 4 mm/h), et la fréquence recommandée est déduite de l'intervalle critique ($RAW / ET_c$ jours), supprimant les valeurs codées en dur sur le mobile.
+
+### 3. Variables d'Environnement Requises
+Dans le fichier `Web/app/.env.local`, ajoutez :
+```env
+AGRO_MONITORING_API_KEY=votre_cle_api_agro_monitoring
+```
+*Note : Le système intègre un mécanisme de repli (fallback) automatique. Si la clé API n'est pas encore active ou s'il y a une erreur réseau, le backend Next.js bascule automatiquement sur un calcul météo classique de Penman-Monteith sans faire planter l'application.*
+

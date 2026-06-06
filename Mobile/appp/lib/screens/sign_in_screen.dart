@@ -5,6 +5,7 @@ import '../constants/app_colors.dart';
 import '../language/app_language.dart';
 import '../language/app_translations.dart';
 import '../services/api_services.dart';
+import '../services/pref_service.dart';
 import 'main_navigation.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -24,8 +25,22 @@ class _SignInScreenState extends State<SignInScreen> {
   bool loading = false;
   bool isSignUpMode = false;
   bool obscurePassword = true;
+  bool keepSignedIn = true;
 
   String tr(String key) => AppTranslations.t(key);
+
+  @override
+  void initState() {
+    super.initState();
+    loadKeepSignedIn();
+  }
+
+  Future<void> loadKeepSignedIn() async {
+    final value = await PrefService.getKeepSignedIn();
+    setState(() {
+      keepSignedIn = value;
+    });
+  }
 
   Future<void> signIn() async {
     final email = emailController.text.trim();
@@ -45,6 +60,8 @@ class _SignInScreenState extends State<SignInScreen> {
         email: email,
         password: password,
       );
+
+      await PrefService.setKeepSignedIn(keepSignedIn);
 
       if (!mounted) return;
 
@@ -118,6 +135,8 @@ class _SignInScreenState extends State<SignInScreen> {
         region: null,
       );
 
+      await PrefService.setKeepSignedIn(keepSignedIn);
+
       if (!mounted) return;
 
       if (response.session != null) {
@@ -138,6 +157,31 @@ class _SignInScreenState extends State<SignInScreen> {
       showMessage(error.message);
     } catch (error) {
       showMessage("${tr("signup_error")}: $error");
+    } finally {
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> signInWithOAuth(OAuthProvider provider) async {
+    try {
+      setState(() {
+        loading = true;
+      });
+
+      await Supabase.instance.client.auth.signInWithOAuth(
+        provider,
+        redirectTo: 'io.supabase.hydrosmart://login-callback',
+      );
+
+      await PrefService.setKeepSignedIn(keepSignedIn);
+    } on AuthException catch (error) {
+      showMessage(error.message);
+    } catch (error) {
+      showMessage("Erreur connexion sociale: $error");
     } finally {
       if (mounted) {
         setState(() {
@@ -451,8 +495,13 @@ class _SignInScreenState extends State<SignInScreen> {
                         Row(
                           children: [
                             Checkbox(
-                              value: false,
-                              onChanged: (_) {},
+                              value: keepSignedIn,
+                              onChanged: (val) {
+                                setState(() {
+                                  keepSignedIn = val ?? true;
+                                });
+                                PrefService.setKeepSignedIn(keepSignedIn);
+                              },
                               side: const BorderSide(color: Colors.green),
                             ),
                             Text(
@@ -539,18 +588,30 @@ class _SignInScreenState extends State<SignInScreen> {
 
                       const SizedBox(height: 18),
 
-                      const Row(
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.facebook, color: Colors.blue, size: 42),
-                          SizedBox(width: 22),
-                          Icon(
-                            Icons.g_mobiledata,
-                            color: Colors.orange,
-                            size: 46,
+                          InkWell(
+                            onTap: () => signInWithOAuth(OAuthProvider.facebook),
+                            borderRadius: BorderRadius.circular(21),
+                            child: const Icon(Icons.facebook, color: Colors.blue, size: 42),
                           ),
-                          SizedBox(width: 22),
-                          Icon(Icons.apple, color: Colors.black, size: 42),
+                          const SizedBox(width: 22),
+                          InkWell(
+                            onTap: () => signInWithOAuth(OAuthProvider.google),
+                            borderRadius: BorderRadius.circular(23),
+                            child: const Icon(
+                              Icons.g_mobiledata,
+                              color: Colors.orange,
+                              size: 46,
+                            ),
+                          ),
+                          const SizedBox(width: 22),
+                          InkWell(
+                            onTap: () => signInWithOAuth(OAuthProvider.apple),
+                            borderRadius: BorderRadius.circular(21),
+                            child: const Icon(Icons.apple, color: Colors.black, size: 42),
+                          ),
                         ],
                       ),
 

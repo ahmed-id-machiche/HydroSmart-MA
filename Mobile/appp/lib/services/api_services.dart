@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/api_config.dart';
 import '../models/crop.dart';
 import '../models/plot.dart';
+import '../models/soil.dart';
 
 class ApiService {
   static String getCurrentUserId() {
@@ -45,6 +46,64 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getFarmerProfile() async {
+    final userId = getCurrentUserId();
+    final response = await http.get(
+      Uri.parse("${ApiConfig.baseUrl}/api/farmers?userId=$userId"),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to load farmer profile: ${response.body}");
+    }
+
+    final List data = jsonDecode(response.body);
+    if (data.isEmpty) {
+      // Fallback: create profile if it doesn't exist yet
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await createFarmerProfile(
+          id: user.id,
+          email: user.email ?? "",
+        );
+        return {
+          "id": user.id,
+          "email": user.email,
+          "role": "farmer",
+        };
+      }
+      throw Exception("Aucun profil trouvé.");
+    }
+    return Map<String, dynamic>.from(data.first);
+  }
+
+  static Future<Map<String, dynamic>> updateFarmerProfile({
+    String? fullName,
+    String? phone,
+    String? region,
+    String? role,
+  }) async {
+    final userId = getCurrentUserId();
+    final response = await http.patch(
+      Uri.parse("${ApiConfig.baseUrl}/api/farmers"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "id": userId,
+        "fullName": fullName,
+        "phone": phone,
+        "region": region,
+        "role": role,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to update profile: ${response.body}");
+    }
+
+    return jsonDecode(response.body);
+  }
+
   static Future<List<Plot>> getPlots() async {
     final userId = getCurrentUserId();
 
@@ -71,6 +130,51 @@ class ApiService {
 
     final List data = jsonDecode(response.body);
     return data.map((item) => Crop.fromJson(item)).toList();
+  }
+
+  static Future<List<Soil>> getSoils() async {
+    final response = await http.get(
+      Uri.parse("${ApiConfig.baseUrl}/api/soils"),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to load soils: ${response.body}");
+    }
+
+    final List data = jsonDecode(response.body);
+    final List<Soil> soilsList = [];
+    for (var item in data) {
+      if (item is Map) {
+        soilsList.add(Soil.fromJson(Map<String, dynamic>.from(item)));
+      } else if (item is String) {
+        soilsList.add(Soil(id: item, nom: item[0].toUpperCase() + item.substring(1)));
+      }
+    }
+    return soilsList;
+  }
+
+  static Future<Crop> createCrop({
+    required String nom,
+    double coefficientKc = 0.85,
+    String stadeCroissance = "mi-saison",
+  }) async {
+    final response = await http.post(
+      Uri.parse("${ApiConfig.baseUrl}/api/crops"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "nom": nom,
+        "coefficient_kc": coefficientKc,
+        "stade_croissance": stadeCroissance,
+      }),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception("Failed to create crop: ${response.body}");
+    }
+
+    return Crop.fromJson(jsonDecode(response.body));
   }
 
   static Future<List<Map<String, dynamic>>> getRecommendations() async {
@@ -196,6 +300,11 @@ class ApiService {
     required double rainfall,
     required double irrigationEfficiency,
     required double surfaceHectare,
+    String? plotId,
+    double? latitude,
+    double? longitude,
+    String? soilType,
+    String? cropName,
   }) async {
     final response = await http.post(
       Uri.parse("${ApiConfig.baseUrl}/api/recommendations"),
@@ -208,6 +317,11 @@ class ApiService {
         "rainfall": rainfall,
         "irrigationEfficiency": irrigationEfficiency,
         "surfaceHectare": surfaceHectare,
+        if (plotId != null) "plotId": plotId,
+        if (latitude != null) "latitude": latitude,
+        if (longitude != null) "longitude": longitude,
+        if (soilType != null) "soilType": soilType,
+        if (cropName != null) "cropName": cropName,
       }),
     );
 
@@ -325,6 +439,11 @@ class ApiService {
       rainfall: rainfall,
       irrigationEfficiency: 0.8,
       surfaceHectare: plot.superficie,
+      plotId: plot.id,
+      latitude: plot.latitude,
+      longitude: plot.longitude,
+      soilType: plot.typeSol,
+      cropName: plot.crop!.nom,
     );
 
     final volumeM3 =
@@ -338,11 +457,17 @@ class ApiService {
         "Recommandation générée avec succès.";
     final today = DateTime.now().toIso8601String().split("T")[0];
 
+    // Retrieve dynamically calculated duration and frequency from the API response
+    final durationHours =
+        double.tryParse(recommendation["dureeIrrigation"].toString()) ?? (volumeM3 > 0 ? 2.0 : 0.0);
+    final frequencyText =
+        recommendation["frequence"]?.toString() ?? (volumeM3 > 0 ? "journalière" : "aucune");
+
     final savedRecommendation = await saveIrrigationRecommendation(
       plotId: plot.id,
       quantiteEau: volumeM3,
-      dureeIrrigation: volumeM3 > 0 ? 2 : 0,
-      frequence: volumeM3 > 0 ? "journalière" : "aucune",
+      dureeIrrigation: durationHours,
+      frequence: frequencyText,
       et0: et0,
       etc: etc,
       besoinNet: netNeed,
@@ -370,5 +495,27 @@ class ApiService {
       "recommendation": recommendation,
       "savedRecommendation": savedRecommendation,
     };
+  }
+
+  static Future<String> getChatResponse(String message) async {
+    final userId = getCurrentUserId();
+
+    final response = await http.post(
+      Uri.parse("${ApiConfig.baseUrl}/api/chatboot"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "userId": userId,
+        "message": message,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Erreur de communication avec l'assistant.");
+    }
+
+    final data = jsonDecode(response.body);
+    return data["reply"]?.toString() ?? "Pas de réponse.";
   }
 }

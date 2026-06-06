@@ -30,6 +30,10 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
   double grossNeed = 0;
   double volumeM3 = 0;
 
+  double? ndvi;
+  double? soilMoisture;
+  String kcSource = "base_db";
+
   String message = "Sélectionnez une parcelle puis générez une recommandation.";
   String frequency = "-";
   String duration = "-";
@@ -83,6 +87,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
       final weather = result["weather"] as Map<String, dynamic>;
       final recommendation =
           result["recommendation"] as Map<String, dynamic>;
+      final metadata = recommendation["metadata"] as Map<String, dynamic>?;
 
       final recVolume =
           double.tryParse(recommendation["volumeM3"].toString()) ?? 0;
@@ -104,11 +109,21 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
             double.tryParse(recommendation["grossNeedMm"].toString()) ?? 0;
         volumeM3 = recVolume;
 
+        ndvi = metadata?["ndvi"] != null 
+            ? double.tryParse(metadata!["ndvi"].toString()) 
+            : null;
+        soilMoisture = metadata?["soilMoisture"] != null 
+            ? double.tryParse(metadata!["soilMoisture"].toString()) 
+            : null;
+        kcSource = metadata?["kcSource"]?.toString() ?? "base_db";
+
         message = recommendation["message"] ??
             "Recommandation générée avec succès.";
 
-        frequency = recVolume > 0 ? "1 fois/jour" : "Aucune";
-        duration = recVolume > 0 ? "45 min" : "0 min";
+        frequency = recommendation["frequence"]?.toString() ?? 
+            (recVolume > 0 ? "1 fois/jour" : "Aucune");
+        duration = recommendation["dureeText"]?.toString() ?? 
+            (recVolume > 0 ? "45 min" : "0 min");
 
         usedDefaultLocation = result["usedDefaultLocation"] == true;
         generating = false;
@@ -155,11 +170,16 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
               ),
               child: Column(
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.arrow_back, color: Colors.white),
-                      Spacer(),
-                      Text(
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const Spacer(),
+                      const Text(
                         "Analyse",
                         style: TextStyle(
                           color: Colors.white,
@@ -167,8 +187,13 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Spacer(),
-                      Icon(Icons.notifications_none, color: Colors.white),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () {},
+                        icon: const Icon(Icons.notifications_none, color: Colors.white),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 28),
@@ -232,6 +257,9 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                                             netNeed = 0;
                                             grossNeed = 0;
                                             volumeM3 = 0;
+                                            ndvi = null;
+                                            soilMoisture = null;
+                                            kcSource = "base_db";
                                             frequency = "-";
                                             duration = "-";
                                           });
@@ -279,160 +307,118 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                     ),
 
                   Container(
-                    padding: const EdgeInsets.all(18),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: cardGreen,
-                      borderRadius: BorderRadius.circular(18),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "Besoin en eau aujourd’hui",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: darkText,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.78),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "${grossNeed.toStringAsFixed(2)} mm",
-                                      style: const TextStyle(
-                                        fontSize: 34,
-                                        fontWeight: FontWeight.bold,
-                                        color: primaryGreen,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      "ET0 ${et0.toStringAsFixed(2)} mm   Kc ${plot?.crop?.coefficientKc ?? 0}",
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      "ETc ${etc.toStringAsFixed(2)} mm",
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                width: 82,
-                                height: 82,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE9F8FF),
-                                  borderRadius: BorderRadius.circular(22),
-                                ),
-                                child: const Icon(
-                                  Icons.water_drop,
-                                  size: 58,
-                                  color: Colors.lightBlueAccent,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: cardGreen,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      children: [
-                        AnalyseInfoRow(
-                          icon: Icons.water_drop_outlined,
-                          label: "Volume recommandé",
-                          value: "${volumeM3.toStringAsFixed(2)} m³",
-                        ),
-                        const Divider(height: 24),
-                        AnalyseInfoRow(
-                          icon: Icons.timer_outlined,
-                          label: "Durée d’irrigation",
-                          value: duration,
-                        ),
-                        const Divider(height: 24),
-                        AnalyseInfoRow(
-                          icon: Icons.calendar_month_outlined,
-                          label: "Fréquence",
-                          value: frequency,
-                        ),
-                        const Divider(height: 24),
-                        AnalyseInfoRow(
-                          icon: Icons.access_time_outlined,
-                          label: "Meilleur moment",
-                          value: "Tôt le matin",
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: cardGreen,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Météo utilisée",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: darkText,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            WeatherSmallStat(
-                              label: "Temp",
-                              value: "${temperature.toStringAsFixed(1)}°C",
-                              icon: Icons.thermostat,
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.opacity,
+                                color: Colors.blue,
+                                size: 16,
+                              ),
                             ),
-                            WeatherSmallStat(
-                              label: "Humidité",
-                              value: "${humidity.toStringAsFixed(0)}%",
-                              icon: Icons.water_drop_outlined,
+                            const SizedBox(width: 10),
+                            const Text(
+                              "Besoin en eau aujourd’hui",
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: darkText,
+                              ),
                             ),
-                            WeatherSmallStat(
-                              label: "Vent",
-                              value: "${windSpeed.toStringAsFixed(1)} m/s",
-                              icon: Icons.air,
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "${grossNeed.toStringAsFixed(2)} mm",
+                                  style: const TextStyle(
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.w900,
+                                    color: primaryGreen,
+                                    letterSpacing: -1,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    "ETc réel : ${etc.toStringAsFixed(2)} mm",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: darkText.withOpacity(0.7),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            WeatherSmallStat(
-                              label: "Pluie",
-                              value: "${rainfall.toStringAsFixed(1)} mm",
-                              icon: Icons.cloudy_snowing,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0F9FF),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.lightBlueAccent.withOpacity(0.2),
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    "ET0 (Météo)",
+                                    style: TextStyle(
+                                      color: Colors.lightBlue[800],
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "${et0.toStringAsFixed(2)} mm",
+                                    style: TextStyle(
+                                      color: Colors.lightBlue[900],
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    "Kc : ${plot?.crop?.coefficientKc ?? 0.0}",
+                                    style: TextStyle(
+                                      color: Colors.lightBlue[800],
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -445,25 +431,305 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE9F8FF),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        AnalyseInfoRow(
+                          icon: Icons.water_drop_outlined,
+                          label: "Volume recommandé",
+                          value: "${volumeM3.toStringAsFixed(2)} m³",
+                        ),
+                        const Divider(height: 20, thickness: 0.6),
+                        AnalyseInfoRow(
+                          icon: Icons.timer_outlined,
+                          label: "Durée d’irrigation",
+                          value: duration,
+                        ),
+                        const Divider(height: 20, thickness: 0.6),
+                        AnalyseInfoRow(
+                          icon: Icons.calendar_month_outlined,
+                          label: "Fréquence",
+                          value: frequency,
+                        ),
+                        const Divider(height: 20, thickness: 0.6),
+                        AnalyseInfoRow(
+                          icon: Icons.access_time_outlined,
+                          label: "Meilleur moment",
+                          value: "Tôt le matin",
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  if (ndvi != null || soilMoisture != null) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: primaryGreen.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.settings_input_antenna,
+                                  color: primaryGreen,
+                                  size: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                "Mesures Sentinel-2 Satellite",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: darkText,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          if (ndvi != null) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.spa_outlined, color: primaryGreen, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Santé des plantes (NDVI)",
+                                      style: TextStyle(
+                                        color: darkText.withOpacity(0.7),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  "${(ndvi! * 100).toStringAsFixed(0)}%",
+                                  style: const TextStyle(
+                                    color: darkText,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: ndvi!.clamp(0.0, 1.0),
+                                minHeight: 6,
+                                backgroundColor: Colors.grey[200],
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  ndvi! < 0.35
+                                      ? Colors.orange
+                                      : (ndvi! < 0.6
+                                          ? Colors.lightGreen
+                                          : primaryGreen),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          if (soilMoisture != null) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.opacity, color: Colors.blue, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Humidité du sol",
+                                      style: TextStyle(
+                                        color: darkText.withOpacity(0.7),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  "${(soilMoisture! * 100).toStringAsFixed(1)}%",
+                                  style: const TextStyle(
+                                    color: darkText,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: soilMoisture!.clamp(0.0, 1.0),
+                                minHeight: 6,
+                                backgroundColor: Colors.grey[200],
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  soilMoisture! < 0.2
+                                      ? Colors.redAccent
+                                      : (soilMoisture! < 0.4
+                                          ? Colors.blueAccent
+                                          : Colors.blue[800]!),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Source des coefficients cultural (Kc) :",
+                                style: TextStyle(
+                                  color: darkText.withOpacity(0.6),
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kcSource == "satellite_ndvi"
+                                      ? primaryGreen.withOpacity(0.1)
+                                      : Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  kcSource == "satellite_ndvi" ? "Satellite" : "FAO standard",
+                                  style: TextStyle(
+                                    color: kcSource == "satellite_ndvi"
+                                        ? primaryGreen
+                                        : Colors.black54,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Météo utilisée",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: darkText,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            WeatherSmallStat(
+                              label: "Temp",
+                              value: "${temperature.toStringAsFixed(1)}°C",
+                              icon: Icons.thermostat,
+                              iconColor: Colors.orange,
+                            ),
+                            WeatherSmallStat(
+                              label: "Humidité",
+                              value: "${humidity.toStringAsFixed(0)}%",
+                              icon: Icons.water_drop_outlined,
+                              iconColor: Colors.blue,
+                            ),
+                            WeatherSmallStat(
+                              label: "Vent",
+                              value: "${windSpeed.toStringAsFixed(1)} m/s",
+                              icon: Icons.air,
+                              iconColor: Colors.teal,
+                            ),
+                            WeatherSmallStat(
+                              label: "Pluie",
+                              value: "${rainfall.toStringAsFixed(1)} mm",
+                              icon: Icons.cloudy_snowing,
+                              iconColor: Colors.lightBlue,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0F2FE),
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
-                        color: Colors.lightBlueAccent.withOpacity(0.3),
+                        color: Colors.lightBlue.withOpacity(0.3),
                       ),
                     ),
                     child: Row(
                       children: [
                         const Icon(
                           Icons.info_outline,
-                          color: Colors.blue,
+                          color: Colors.lightBlue,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             message,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 12.5,
                               color: darkText,
+                              height: 1.3,
                             ),
                           ),
                         ),
@@ -473,11 +739,30 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
 
                   const SizedBox(height: 20),
 
-                  SizedBox(
+                  Container(
                     height: 54,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(28),
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFF4DB6AC),
+                          Color(0xFF2E7D32),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF2E7D32).withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF49AE62),
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
@@ -498,7 +783,11 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                         generating
                             ? "Calcul en cours..."
                             : "Générer recommandation",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                   ),
@@ -516,37 +805,55 @@ class WeatherSmallStat extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final Color iconColor;
 
   const WeatherSmallStat({
     super.key,
     required this.label,
     required this.value,
     required this.icon,
+    required this.iconColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, color: primaryGreen),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.black54,
-            fontSize: 11,
+    return Container(
+      width: 72,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: const TextStyle(
-            color: darkText,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: darkText.withOpacity(0.5),
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: darkText,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -535,6 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   child: FieldCard(
                                     label: plot.nom,
+                                    cropName: plot.crop?.nom ?? "Culture",
                                   ),
                                 ),
                               );
@@ -569,16 +570,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.smart_toy_outlined,
-                        color: Colors.white,
-                        size: 22,
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                        ),
+                        child: ClipOval(
+                          child: Image.asset(
+                            "assets/images/bot_farmer.png",
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
-                      SizedBox(width: 8),
-                      Text(
+                      const SizedBox(width: 8),
+                      const Text(
                         "Assistant",
                         style: TextStyle(
                           color: Colors.white,

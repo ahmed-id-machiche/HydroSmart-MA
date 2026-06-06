@@ -18,13 +18,21 @@ class AnalyseInfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: primaryGreen),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: primaryGreen.withOpacity(0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: primaryGreen, size: 18),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
             label,
             style: const TextStyle(
-              color: darkText,
+              color: Colors.black87,
+              fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -33,13 +41,9 @@ class AnalyseInfoRow extends StatelessWidget {
           value,
           style: const TextStyle(
             color: darkText,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
-        ),
-        const SizedBox(width: 4),
-        const Icon(
-          Icons.chevron_right,
-          color: Colors.black45,
         ),
       ],
     );

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/app_colors.dart';
+import '../services/pref_service.dart';
+import 'main_navigation.dart';
 import 'sign_in_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -14,9 +17,27 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    checkSession();
+  }
 
-    Future.delayed(const Duration(seconds: 10), () {
-      if (!mounted) return;
+  Future<void> checkSession() async {
+    await Future.delayed(const Duration(milliseconds: 2500));
+    if (!mounted) return;
+
+    final keepSignedIn = await PrefService.getKeepSignedIn();
+    final session = Supabase.instance.client.auth.currentSession;
+
+    if (keepSignedIn && session != null) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const MainNavigation(),
+        ),
+      );
+    } else {
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
 
       Navigator.pushReplacement(
         context,
@@ -24,7 +45,7 @@ class _SplashScreenState extends State<SplashScreen> {
           builder: (_) => const SignInScreen(),
         ),
       );
-    });
+    }
   }
 
   @override
