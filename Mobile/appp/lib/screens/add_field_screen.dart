@@ -8,8 +8,11 @@ import '../services/api_services.dart';
 import '../state/selected_location.dart';
 import 'map_picker_screen.dart';
 
+import '../models/plot.dart';
+
 class AddFieldScreen extends StatefulWidget {
-  const AddFieldScreen({super.key});
+  final Plot? plotToEdit;
+  const AddFieldScreen({super.key, this.plotToEdit});
 
   @override
   State<AddFieldScreen> createState() => _AddFieldScreenState();
@@ -22,6 +25,8 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
   List<Crop> crops = [];
   Crop? selectedCrop;
   bool isCustomCrop = false;
+  String? selectedCategory;
+  String? selectedCategoryCrop;
   final TextEditingController customCropController = TextEditingController();
 
   List<Soil> soils = [];
@@ -61,20 +66,39 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
 
       setState(() {
         crops = cropsData;
-        selectedCrop = cropsData.isNotEmpty ? cropsData.first : null;
-
         soils = soilsData;
-        Soil? defaultSoil;
-        for (final s in soilsData) {
-          if (s.id == "limoneux") {
-            defaultSoil = s;
-            break;
-          }
-        }
-        selectedSoil = defaultSoil ?? (soilsData.isNotEmpty ? soilsData.first : Soil(id: "limoneux", nom: "Limoneux"));
 
-        selectedSurface = surfaceOptions.first;
-        surfaceController.text = selectedSurface.toString();
+        initializeCropDropdowns(cropsData);
+
+        if (widget.plotToEdit != null) {
+          selectedSoil = soilsData.firstWhere(
+            (s) => s.id == widget.plotToEdit!.typeSol,
+            orElse: () => soilsData.isNotEmpty ? soilsData.first : Soil(id: "limoneux", nom: "Limoneux"),
+          );
+
+          selectedSurface = widget.plotToEdit!.superficie;
+          surfaceController.text = selectedSurface.toString();
+
+          if (widget.plotToEdit!.latitude != null && widget.plotToEdit!.longitude != null) {
+            SelectedLocation.update(
+              lat: widget.plotToEdit!.latitude!,
+              lon: widget.plotToEdit!.longitude!,
+              locationName: widget.plotToEdit!.localisation,
+            );
+          }
+        } else {
+          Soil? defaultSoil;
+          for (final s in soilsData) {
+            if (s.id == "limoneux") {
+              defaultSoil = s;
+              break;
+            }
+          }
+          selectedSoil = defaultSoil ?? (soilsData.isNotEmpty ? soilsData.first : Soil(id: "limoneux", nom: "Limoneux"));
+
+          selectedSurface = surfaceOptions.first;
+          surfaceController.text = selectedSurface.toString();
+        }
         loading = false;
       });
     } catch (error) {
@@ -85,21 +109,68 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur chargement des données: $error")),
+        SnackBar(content: Text("Error loading data: $error")),
       );
     }
   }
 
-  String generatedFieldName() {
-    if (isCustomCrop) {
-      final name = customCropController.text.trim();
-      return name.isNotEmpty ? "Parcelle $name" : "Parcelle Autre";
-    }
-    if (selectedCrop == null) {
-      return "Parcelle";
+  void initializeCropDropdowns(List<Crop> cropsData) {
+    if (widget.plotToEdit == null || widget.plotToEdit!.crop == null) {
+      // Default to first category and first crop
+      selectedCategory = cropCategories.first.name;
+      selectedCategoryCrop = cropCategories.first.cropNames.first;
+      final cleanName = cleanCropName(selectedCategoryCrop!);
+      selectedCrop = cropsData.firstWhere(
+        (c) => c.nom.toLowerCase() == cleanName.toLowerCase(),
+        orElse: () => cropsData.isNotEmpty ? cropsData.first : Crop(id: "dummy", nom: cleanName, coefficientKc: 0.85),
+      );
+      isCustomCrop = !cropsData.any((c) => c.id == selectedCrop?.id);
+      if (isCustomCrop) {
+        customCropController.text = cleanName;
+      }
+      return;
     }
 
-    return "Parcelle ${selectedCrop!.nom}";
+    final cropName = widget.plotToEdit!.crop!.nom.trim();
+    final isDbCrop = cropsData.any((c) => c.id == widget.plotToEdit!.crop!.id);
+
+    for (final cat in cropCategories) {
+      for (final cName in cat.cropNames) {
+        if (cleanCropName(cName).toLowerCase() == cropName.toLowerCase()) {
+          selectedCategory = cat.name;
+          selectedCategoryCrop = cName;
+          isCustomCrop = !isDbCrop;
+          if (isDbCrop) {
+            selectedCrop = cropsData.firstWhere((c) => c.id == widget.plotToEdit!.crop!.id);
+          } else {
+            customCropController.text = cropName;
+          }
+          return;
+        }
+      }
+    }
+
+    // Default fallback to "Other" entered manually
+    selectedCategory = "Other crop (Enter)...";
+    selectedCategoryCrop = null;
+    isCustomCrop = true;
+    selectedCrop = null;
+    customCropController.text = cropName;
+  }
+
+  String generatedFieldName() {
+    if (widget.plotToEdit != null) {
+      return widget.plotToEdit!.nom;
+    }
+    if (isCustomCrop) {
+      final name = customCropController.text.trim();
+      return name.isNotEmpty ? "Plot $name" : "Plot Other";
+    }
+    if (selectedCrop == null) {
+      return "Plot";
+    }
+
+    return "Plot ${selectedCrop!.nom}";
   }
 
   IconData getCropIcon(String cropName) {
@@ -143,7 +214,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       final places = await placemarkFromCoordinates(lat, lon);
 
       if (places.isEmpty) {
-        return "Maroc";
+        return "Morocco";
       }
 
       final place = places.first;
@@ -177,9 +248,9 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
         return country;
       }
 
-      return "Maroc";
+      return "Morocco";
     } catch (_) {
-      return "Maroc";
+      return "Morocco";
     }
   }
 
@@ -211,7 +282,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       SelectedLocation.update(
         lat: result.latitude,
         lon: result.longitude,
-        locationName: "Maroc",
+        locationName: "Morocco",
       );
     } finally {
       if (mounted) {
@@ -230,28 +301,28 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
     final inputSurface = double.tryParse(surfaceController.text);
     if (inputSurface == null || inputSurface <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Veuillez entrer une superficie valide.")),
+        const SnackBar(content: Text("Please enter a valid area.")),
       );
       return;
     }
 
     if (selectedSoil == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Veuillez sélectionner un type de sol.")),
+        const SnackBar(content: Text("Please select a soil type.")),
       );
       return;
     }
 
     if (isCustomCrop && customCropController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Veuillez saisir le nom de la culture.")),
+        const SnackBar(content: Text("Please enter the crop name.")),
       );
       return;
     }
 
     if (!isCustomCrop && selectedCrop == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Veuillez sélectionner une culture.")),
+        const SnackBar(content: Text("Please select a crop.")),
       );
       return;
     }
@@ -264,7 +335,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Veuillez choisir la localisation depuis cet écran ou le Home avant d'ajouter une parcelle.",
+            "Please choose a location from this screen or Home before adding/editing a plot.",
           ),
         ),
       );
@@ -286,15 +357,30 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
         cropId = selectedCrop!.id;
       }
 
-      await ApiService.addPlot(
-        cropId: cropId,
-        nom: generatedFieldName(),
-        superficie: inputSurface,
-        localisation: selectedLocationName,
-        typeSol: selectedSoil!.id,
-        latitude: selectedLatitude,
-        longitude: selectedLongitude,
-      );
+      if (widget.plotToEdit != null) {
+        await ApiService.updatePlot(
+          id: widget.plotToEdit!.id,
+          cropId: cropId,
+          nom: generatedFieldName(),
+          superficie: inputSurface,
+          localisation: selectedLocationName,
+          typeSol: selectedSoil!.id,
+          latitude: selectedLatitude,
+          longitude: selectedLongitude,
+          customCropName: isCustomCrop ? customCropController.text.trim() : null,
+        );
+      } else {
+        await ApiService.addPlot(
+          cropId: cropId,
+          nom: generatedFieldName(),
+          superficie: inputSurface,
+          localisation: selectedLocationName,
+          typeSol: selectedSoil!.id,
+          latitude: selectedLatitude,
+          longitude: selectedLongitude,
+          customCropName: isCustomCrop ? customCropController.text.trim() : null,
+        );
+      }
 
       if (!mounted) return;
 
@@ -303,7 +389,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur ajout parcelle: $error")),
+        SnackBar(content: Text(widget.plotToEdit != null ? "Error updating plot: $error" : "Error adding plot: $error")),
       );
     } finally {
       if (mounted) {
@@ -341,9 +427,9 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
                   ),
                   const Spacer(),
-                  const Text(
-                    "Ajouter parcelle",
-                    style: TextStyle(
+                  Text(
+                    widget.plotToEdit != null ? "Edit Plot" : "Add Plot",
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -372,14 +458,15 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                         const SizedBox(height: 18),
 
                         SectionCard(
-                          title: "Choisir la culture",
-                          subtitle: "Sélectionnez ce qui est planté.",
+                          title: "Choose Crop",
+                          subtitle: "Select what is planted.",
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              DropdownButtonFormField<Crop?>(
-                                value: isCustomCrop ? null : selectedCrop,
+                              DropdownButtonFormField<String>(
+                                value: selectedCategory,
                                 decoration: InputDecoration(
+                                  labelText: "Crop Category",
                                   filled: true,
                                   fillColor: Colors.white,
                                   contentPadding: const EdgeInsets.symmetric(
@@ -406,70 +493,136 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                                     ),
                                   ),
                                 ),
-                                hint: const Text("Sélectionner la culture"),
+                                hint: const Text("Select Category"),
                                 items: [
-                                  ...crops.map((crop) {
-                                    return DropdownMenuItem<Crop?>(
-                                      value: crop,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            getCropIcon(crop.nom),
-                                            color: getCropColor(crop.nom),
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            crop.nom,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: darkText,
-                                            ),
-                                          ),
-                                        ],
+                                  ...cropCategories.map((cat) {
+                                    return DropdownMenuItem<String>(
+                                      value: cat.name,
+                                      child: Text(
+                                        cat.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: darkText,
+                                        ),
                                       ),
                                     );
                                   }).toList(),
-                                  const DropdownMenuItem<Crop?>(
-                                    value: null,
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.add_circle_outline,
-                                          color: Colors.blueGrey,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Text(
-                                          "Autre culture (Saisir)...",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blueGrey,
-                                          ),
-                                        ),
-                                      ],
+                                  const DropdownMenuItem<String>(
+                                    value: "Other crop (Enter)...",
+                                    child: Text(
+                                      "Other crop (Enter)...",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blueGrey,
+                                      ),
                                     ),
                                   ),
                                 ],
                                 onChanged: (value) {
                                   setState(() {
-                                    if (value == null) {
+                                    selectedCategory = value;
+                                    if (value == "Other crop (Enter)...") {
+                                      selectedCategoryCrop = null;
                                       isCustomCrop = true;
                                       selectedCrop = null;
-                                    } else {
-                                      isCustomCrop = false;
-                                      selectedCrop = value;
+                                      customCropController.clear();
+                                    } else if (value != null) {
+                                      final cat = cropCategories.firstWhere((c) => c.name == value);
+                                      selectedCategoryCrop = cat.cropNames.first;
+                                      final cleanName = cleanCropName(selectedCategoryCrop!);
+                                      final matched = crops.firstWhere(
+                                        (c) => c.nom.toLowerCase() == cleanName.toLowerCase(),
+                                        orElse: () => Crop(id: "dummy", nom: cleanName, coefficientKc: 0.85),
+                                      );
+                                      if (crops.any((c) => c.id == matched.id)) {
+                                        selectedCrop = matched;
+                                        isCustomCrop = false;
+                                      } else {
+                                        selectedCrop = null;
+                                        isCustomCrop = true;
+                                        customCropController.text = cleanName;
+                                      }
                                     }
                                   });
                                 },
                               ),
-                              if (isCustomCrop) ...[
-                                const SizedBox(height: 12),
+                              if (selectedCategory != null && selectedCategory != "Other crop (Enter)...") ...[
+                                const SizedBox(height: 14),
+                                DropdownButtonFormField<String>(
+                                  value: selectedCategoryCrop,
+                                  decoration: InputDecoration(
+                                    labelText: "Select Crop",
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(
+                                        color: primaryGreen.withOpacity(0.3),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(
+                                        color: primaryGreen.withOpacity(0.3),
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(
+                                        color: primaryGreen,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  hint: const Text("Select Crop"),
+                                  items: cropCategories
+                                      .firstWhere((cat) => cat.name == selectedCategory)
+                                      .cropNames
+                                      .map((cName) {
+                                    return DropdownMenuItem<String>(
+                                      value: cName,
+                                      child: Text(
+                                        cName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: darkText,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedCategoryCrop = value;
+                                      if (value != null) {
+                                        final cleanName = cleanCropName(value);
+                                        final matched = crops.firstWhere(
+                                          (c) => c.nom.toLowerCase() == cleanName.toLowerCase(),
+                                          orElse: () => Crop(id: "dummy", nom: cleanName, coefficientKc: 0.85),
+                                        );
+                                        if (crops.any((c) => c.id == matched.id)) {
+                                          selectedCrop = matched;
+                                          isCustomCrop = false;
+                                        } else {
+                                          selectedCrop = null;
+                                          isCustomCrop = true;
+                                          customCropController.text = cleanName;
+                                        }
+                                      }
+                                    });
+                                  },
+                                ),
+                              ],
+                              if (selectedCategory == "Other crop (Enter)...") ...[
+                                const SizedBox(height: 14),
                                 TextFormField(
                                   controller: customCropController,
                                   decoration: InputDecoration(
-                                    labelText: "Nom de la culture",
-                                    hintText: "Ex: Menthe, Carotte, etc.",
+                                    labelText: "Custom Crop Name",
+                                    hintText: "e.g. Mint, Avocado, Fig",
                                     prefixIcon: const Icon(
                                       Icons.edit_note,
                                       color: primaryGreen,
@@ -511,8 +664,8 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                         const SizedBox(height: 18),
 
                         SectionCard(
-                          title: "Choisir la superficie",
-                          subtitle: "Superficie de la parcelle en hectares.",
+                          title: "Choose Area",
+                          subtitle: "Plot area in hectares.",
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -522,8 +675,8 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                                   decimal: true,
                                 ),
                                 decoration: InputDecoration(
-                                  labelText: "Superficie (ha)",
-                                  hintText: "Ex: 1.5, 0.75, 12.0",
+                                  labelText: "Area (ha)",
+                                  hintText: "e.g. 1.5, 0.75, 12.0",
                                   prefixIcon: const Icon(
                                     Icons.straighten_outlined,
                                     color: primaryGreen,
@@ -566,7 +719,7 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                               ),
                               const SizedBox(height: 14),
                               const Text(
-                                "Options de superficie rapide :",
+                                "Quick area options:",
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.black54,
@@ -600,11 +753,11 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                         const SizedBox(height: 18),
 
                         SectionCard(
-                          title: "Choisir le type de sol",
-                          subtitle: "Sélectionnez le sol dominant.",
+                          title: "Choose Soil Type",
+                          subtitle: "Select the dominant soil.",
                           child: soils.isEmpty
                               ? const Text(
-                                  "Aucun sol disponible.",
+                                  "No soil available.",
                                   style: TextStyle(color: Colors.black54),
                                 )
                               : Wrap(
@@ -677,13 +830,13 @@ class _AddFieldScreenState extends State<AddFieldScreen> {
                             strokeWidth: 2,
                           ),
                         )
-                      : const Icon(Icons.add),
+                      : Icon(widget.plotToEdit != null ? Icons.save : Icons.add),
                   label: Text(
                     saving
-                        ? "Ajout en cours..."
+                        ? (widget.plotToEdit != null ? "Saving..." : "Adding...")
                         : hasLocation
-                            ? "Ajouter la parcelle"
-                            : "Choisir localisation",
+                            ? (widget.plotToEdit != null ? "Save Changes" : "Add Plot")
+                            : "Choose Location",
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                     ),
@@ -767,7 +920,7 @@ class LocationCard extends StatelessWidget {
                             Row(
                               children: [
                                 const Text(
-                                  "Localisation de la parcelle",
+                                  "Plot Location",
                                   style: TextStyle(
                                     color: darkText,
                                     fontWeight: FontWeight.bold,
@@ -778,7 +931,7 @@ class LocationCard extends StatelessWidget {
                                 const Icon(Icons.edit_location_alt, size: 16, color: primaryGreen),
                                 const SizedBox(width: 4),
                                 const Text(
-                                  "Modifier",
+                                  "Edit",
                                   style: TextStyle(
                                     color: primaryGreen,
                                     fontWeight: FontWeight.bold,
@@ -789,7 +942,7 @@ class LocationCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              locationName ?? "Maroc",
+                              locationName ?? "Morocco",
                               style: const TextStyle(
                                 color: Colors.black87,
                                 fontSize: 14,
@@ -811,7 +964,7 @@ class LocationCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "Aucune localisation sélectionnée",
+                              "No location selected",
                               style: TextStyle(
                                 color: Colors.orange,
                                 fontWeight: FontWeight.bold,
@@ -820,7 +973,7 @@ class LocationCard extends StatelessWidget {
                             ),
                             SizedBox(height: 5),
                             Text(
-                              "Appuyez ici pour choisir la localisation sur la carte.",
+                              "Tap here to choose the location on the map.",
                               style: TextStyle(
                                 color: Colors.black54,
                                 fontSize: 13,
@@ -979,7 +1132,7 @@ class PreviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "Résumé",
+            "Summary",
             style: TextStyle(
               color: primaryGreen,
               fontSize: 17,
@@ -987,14 +1140,14 @@ class PreviewCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          PreviewLine(label: "Nom", value: fieldName),
-          PreviewLine(label: "Culture", value: cropName),
+          PreviewLine(label: "Name", value: fieldName),
+          PreviewLine(label: "Crop", value: cropName),
           PreviewLine(
-            label: "Surface",
+            label: "Area",
             value: surface == null ? "-" : "${formatPreviewSurface(surface!)} ha",
           ),
-          PreviewLine(label: "Sol", value: soil),
-          PreviewLine(label: "Localisation", value: location ?? "-"),
+          PreviewLine(label: "Soil", value: soil),
+          PreviewLine(label: "Location", value: location ?? "-"),
         ],
       ),
     );
@@ -1050,4 +1203,72 @@ class PreviewLine extends StatelessWidget {
       ),
     );
   }
+}
+
+class CropCategory {
+  final String name;
+  final List<String> cropNames;
+
+  const CropCategory({
+    required this.name,
+    required this.cropNames,
+  });
+}
+
+const List<CropCategory> cropCategories = [
+  CropCategory(
+    name: "Fruits",
+    cropNames: [
+      "Olivier (Olive)",
+      "Agrumes (Citrus)",
+      "Fraise (Strawberry)",
+      "Pommier (Apple)",
+      "Poirier (Pear)",
+      "Avocat (Avocado)",
+      "Grenadier (Pomegranate)",
+      "Figuier (Fig)",
+      "Vigne (Grape)",
+      "Pasteque (Watermelon)",
+      "Melon",
+      "Amandier (Almond)",
+    ],
+  ),
+  CropCategory(
+    name: "Vegetables",
+    cropNames: [
+      "Tomate (Tomato)",
+      "Carotte (Carrot)",
+      "Pomme de terre (Potato)",
+      "Oignon (Onion)",
+      "Poivron (Pepper)",
+      "Courgette (Zucchini)",
+      "Ail (Garlic)",
+      "Aubergine (Eggplant)",
+      "Concombre (Cucumber)",
+      "Laitue (Lettuce)",
+    ],
+  ),
+  CropCategory(
+    name: "Cereals & Forages",
+    cropNames: [
+      "Blé (Wheat)",
+      "Maïs (Corn)",
+      "Orge (Barley)",
+      "Fève (Faba bean)",
+      "Luzerne (Alfalfa)",
+    ],
+  ),
+  CropCategory(
+    name: "Herbs & Others",
+    cropNames: [
+      "Menthe (Mint)",
+    ],
+  ),
+];
+
+String cleanCropName(String rawName) {
+  if (rawName.contains('(')) {
+    return rawName.split('(')[0].trim();
+  }
+  return rawName.trim();
 }

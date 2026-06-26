@@ -17,7 +17,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   final List<ChatMessage> messages = [
     ChatMessage(
       text:
-          "Bonjour 👋 Je suis l’assistant HydroSmart. Pose-moi une question sur l’irrigation, la météo, ET0, ETc ou tes parcelles.",
+          "Hello 👋 I am the HydroSmart Assistant. Ask me a question about irrigation, weather, ET0, ETc, or your plots.",
       isUser: false,
     ),
   ];
@@ -70,7 +70,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       setState(() {
         messages.add(ChatMessage(
           text:
-              "Désolé, je ne parviens pas à contacter le serveur. S'il te plaît, vérifie ta connexion internet et réessaie.",
+              "Sorry, I cannot contact the server. Please check your internet connection and try again.",
           isUser: false,
           isError: true,
         ));
@@ -100,7 +100,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       setState(() {
         messages.add(ChatMessage(
           text:
-              "Désolé, je ne parviens pas à contacter le serveur. S'il te plaît, vérifie ta connexion internet et réessaie.",
+              "Sorry, I cannot contact the server. Please check your internet connection and try again.",
           isUser: false,
           isError: true,
         ));
@@ -179,17 +179,17 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Assistant HydroSmart",
-                          style: TextStyle(
+                          "HydroSmart Assistant",
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          "En ligne • Aide irrigation",
-                          style: TextStyle(
+                          "Online • Irrigation Help",
+                          style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 12,
                           ),
@@ -254,7 +254,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                       maxLines: 4,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: "Pose ta question sur l'irrigation...",
+                        hintText: "Ask your question about irrigation...",
                         filled: true,
                         fillColor: lightBackground,
                         contentPadding: const EdgeInsets.symmetric(
@@ -409,7 +409,7 @@ class ChatBubble extends StatelessWidget {
                             Icon(Icons.refresh, color: Colors.white, size: 14),
                             SizedBox(width: 4),
                             Text(
-                              "Réessayer",
+                              "Retry",
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -649,7 +649,7 @@ class BotTypingBubble extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    "Assistant écrit...",
+                    "Assistant is typing...",
                     style: TextStyle(
                       color: darkText.withOpacity(0.6),
                       fontSize: 13,

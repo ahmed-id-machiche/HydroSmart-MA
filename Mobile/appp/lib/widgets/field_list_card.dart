@@ -34,6 +34,27 @@ class FieldListCard extends StatelessWidget {
       return "assets/images/potato.png";
     } else if (name.contains("banan") || name.contains("bananier")) {
       return "assets/images/banana.png";
+    } else if (name.contains("pommier") || name.contains("apple")) {
+      return "assets/images/apple.png";
+    } else if (name.contains("avocat") || name.contains("avocado")) {
+      return "assets/images/avocado.png";
+    } else if (name.contains("vigne") || name.contains("grape")) {
+      return "assets/images/grape.png";
+    } else if (name.contains("pasteque") || name.contains("watermelon")) {
+      return "assets/images/watermelon.png";
+    } else if (name.contains("carotte") || name.contains("carrot")) {
+      return "assets/images/carrot.png";
+    } else if (name.contains("menthe") || name.contains("mint")) {
+      return "assets/images/mint.png";
+    } else if (name.contains("luzerne") || name.contains("alfalfa")) {
+      return "assets/images/alfalfa.png";
+    } else if (name.contains("poivron") || name.contains("pepper")) {
+      return "assets/images/pepper.png";
+    } else if (name.contains("poirier") || name.contains("pear") ||
+               name.contains("grenadier") || name.contains("pomegranate") ||
+               name.contains("figuier") || name.contains("fig") ||
+               name.contains("amandier") || name.contains("almond")) {
+      return "assets/images/citrus.png"; // Fallback tree image
     }
     return "assets/images/default.png";
   }

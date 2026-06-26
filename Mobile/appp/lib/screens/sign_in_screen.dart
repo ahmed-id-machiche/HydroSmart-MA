@@ -181,7 +181,7 @@ class _SignInScreenState extends State<SignInScreen> {
     } on AuthException catch (error) {
       showMessage(error.message);
     } catch (error) {
-      showMessage("Erreur connexion sociale: $error");
+      showMessage("Social sign-in error: $error");
     } finally {
       if (mounted) {
         setState(() {
@@ -268,6 +268,119 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                 ],
               ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void showForgotPasswordDialog() {
+    final resetEmailController = TextEditingController(
+      text: emailController.text.trim(),
+    );
+    bool resetting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                tr("reset_password"),
+                style: const TextStyle(
+                  color: darkText,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr("enter_email_to_reset"),
+                    style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: resetEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: inputDecoration(
+                      hint: tr("enter_email"),
+                      icon: Icons.email_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: resetting ? null : () => Navigator.pop(context),
+                  child: Text(
+                    tr("cancel"),
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: resetting
+                      ? null
+                      : () async {
+                          final email = resetEmailController.text.trim();
+                          if (email.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(tr("enter_email"))),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() {
+                            resetting = true;
+                          });
+
+                          try {
+                            await Supabase.instance.client.auth.resetPasswordForEmail(
+                              email,
+                              redirectTo: 'io.supabase.flutter://reset-callback',
+                            );
+                            if (!mounted) return;
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(tr("reset_link_sent"))),
+                            );
+                          } catch (error) {
+                            setDialogState(() {
+                              resetting = false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("${tr("reset_link_error")}: $error"),
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: resetting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(tr("send_reset_link")),
+                ),
+              ],
             );
           },
         );
@@ -407,17 +520,32 @@ class _SignInScreenState extends State<SignInScreen> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: primaryGreen,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 2.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        child: Image.asset(
-                          "assets/images/logo.png",
-                          errorBuilder: (_, __, ___) {
-                            return const Icon(
-                              Icons.water_drop,
-                              color: Colors.lightBlueAccent,
-                              size: 55,
-                            );
-                          },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.asset(
+                            "assets/images/logo.png",
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) {
+                              return const Icon(
+                                Icons.water_drop,
+                                color: Colors.lightBlueAccent,
+                                size: 45,
+                              );
+                            },
+                          ),
                         ),
                       ),
 
@@ -509,12 +637,15 @@ class _SignInScreenState extends State<SignInScreen> {
                               style: const TextStyle(fontSize: 12),
                             ),
                             const Spacer(),
-                            Text(
-                              tr("forgot_password"),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold,
+                            GestureDetector(
+                              onTap: showForgotPasswordDialog,
+                              child: Text(
+                                tr("forgot_password"),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
@@ -600,17 +731,18 @@ class _SignInScreenState extends State<SignInScreen> {
                           InkWell(
                             onTap: () => signInWithOAuth(OAuthProvider.google),
                             borderRadius: BorderRadius.circular(23),
-                            child: const Icon(
-                              Icons.g_mobiledata,
-                              color: Colors.orange,
-                              size: 46,
+                            child: Image.asset(
+                              "assets/images/google_logo.png",
+                              width: 38,
+                              height: 38,
+                              errorBuilder: (_, __, ___) {
+                                return const Icon(
+                                  Icons.g_mobiledata,
+                                  color: Colors.orange,
+                                  size: 46,
+                                );
+                              },
                             ),
-                          ),
-                          const SizedBox(width: 22),
-                          InkWell(
-                            onTap: () => signInWithOAuth(OAuthProvider.apple),
-                            borderRadius: BorderRadius.circular(21),
-                            child: const Icon(Icons.apple, color: Colors.black, size: 42),
                           ),
                         ],
                       ),

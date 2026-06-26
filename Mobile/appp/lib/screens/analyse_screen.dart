@@ -4,9 +4,12 @@ import '../constants/app_colors.dart';
 import '../models/plot.dart';
 import '../services/api_services.dart';
 import '../widgets/analyse_info_row.dart';
+import '../widgets/notification_bell.dart';
 
 class AnalyseScreen extends StatefulWidget {
-  const AnalyseScreen({super.key});
+  final Plot? initialPlot;
+
+  const AnalyseScreen({super.key, this.initialPlot});
 
   @override
   State<AnalyseScreen> createState() => _AnalyseScreenState();
@@ -34,7 +37,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
   double? soilMoisture;
   String kcSource = "base_db";
 
-  String message = "Sélectionnez une parcelle puis générez une recommandation.";
+  String message = "Select a plot then generate a recommendation.";
   String frequency = "-";
   String duration = "-";
   bool usedDefaultLocation = false;
@@ -51,9 +54,21 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
 
       setState(() {
         plots = data;
-        selectedPlot = data.isNotEmpty ? data.first : null;
+        if (widget.initialPlot != null) {
+          try {
+            selectedPlot = data.firstWhere((p) => p.id == widget.initialPlot!.id);
+          } catch (_) {
+            selectedPlot = widget.initialPlot;
+          }
+        } else {
+          selectedPlot = data.isNotEmpty ? data.first : null;
+        }
         loading = false;
       });
+
+      if (widget.initialPlot != null) {
+        generateRecommendation();
+      }
     } catch (error) {
       setState(() {
         loading = false;
@@ -62,7 +77,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur chargement parcelles: $error")),
+        SnackBar(content: Text("Error loading plots: $error")),
       );
     }
   }
@@ -70,7 +85,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
   Future<void> generateRecommendation() async {
     if (selectedPlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Choisissez une parcelle.")),
+        const SnackBar(content: Text("Choose a plot.")),
       );
       return;
     }
@@ -118,10 +133,10 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
         kcSource = metadata?["kcSource"]?.toString() ?? "base_db";
 
         message = recommendation["message"] ??
-            "Recommandation générée avec succès.";
+            "Recommendation generated successfully.";
 
         frequency = recommendation["frequence"]?.toString() ?? 
-            (recVolume > 0 ? "1 fois/jour" : "Aucune");
+            (recVolume > 0 ? "once/day" : "none");
         duration = recommendation["dureeText"]?.toString() ?? 
             (recVolume > 0 ? "45 min" : "0 min");
 
@@ -133,7 +148,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              "GPS absent pour cette parcelle. Localisation Agadir utilisée par défaut.",
+              "GPS missing for this plot. Agadir location used by default.",
             ),
           ),
         );
@@ -146,7 +161,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur recommandation: $error")),
+        SnackBar(content: Text("Error generating recommendation: $error")),
       );
     }
   }
@@ -172,12 +187,15 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                 children: [
                   Row(
                     children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
+                      if (Navigator.canPop(context))
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        )
+                      else
+                        const SizedBox(width: 24),
                       const Spacer(),
                       const Text(
                         "Analyse",
@@ -188,12 +206,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                         ),
                       ),
                       const Spacer(),
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.notifications_none, color: Colors.white),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
+                      const NotificationBell(),
                     ],
                   ),
                   const SizedBox(height: 28),
@@ -207,7 +220,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                         ? const Center(child: CircularProgressIndicator())
                         : plots.isEmpty
                             ? const Text(
-                                "Aucune parcelle disponible.",
+                                "No plots available.",
                                 style: TextStyle(
                                   color: darkText,
                                   fontWeight: FontWeight.bold,
@@ -251,7 +264,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                                           setState(() {
                                             selectedPlot = value;
                                             message =
-                                                "Cliquez sur Générer pour calculer la recommandation.";
+                                                "Click Generate to calculate recommendations.";
                                             et0 = 0;
                                             etc = 0;
                                             netNeed = 0;
@@ -295,7 +308,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              "${plot.crop?.nom ?? 'Culture'} • ${plot.typeSol} • ${plot.localisation}",
+                              "${plot.crop?.nom ?? 'Crop'} • ${plot.typeSol} • ${plot.localisation}",
                               style: const TextStyle(
                                 color: darkText,
                                 fontWeight: FontWeight.w500,
@@ -338,7 +351,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                             ),
                             const SizedBox(width: 10),
                             const Text(
-                              "Besoin en eau aujourd’hui",
+                              "Water need today",
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -371,7 +384,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    "ETc réel : ${etc.toStringAsFixed(2)} mm",
+                                    "Real ETc: ${etc.toStringAsFixed(2)} mm",
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
@@ -393,7 +406,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                               child: Column(
                                 children: [
                                   Text(
-                                    "ET0 (Météo)",
+                                    "ET0 (Weather)",
                                     style: TextStyle(
                                       color: Colors.lightBlue[800],
                                       fontSize: 10,
@@ -445,26 +458,26 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                       children: [
                         AnalyseInfoRow(
                           icon: Icons.water_drop_outlined,
-                          label: "Volume recommandé",
+                          label: "Recommended volume",
                           value: "${volumeM3.toStringAsFixed(2)} m³",
                         ),
                         const Divider(height: 20, thickness: 0.6),
                         AnalyseInfoRow(
                           icon: Icons.timer_outlined,
-                          label: "Durée d’irrigation",
+                          label: "Irrigation duration",
                           value: duration,
                         ),
                         const Divider(height: 20, thickness: 0.6),
                         AnalyseInfoRow(
                           icon: Icons.calendar_month_outlined,
-                          label: "Fréquence",
+                          label: "Frequency",
                           value: frequency,
                         ),
                         const Divider(height: 20, thickness: 0.6),
                         AnalyseInfoRow(
                           icon: Icons.access_time_outlined,
-                          label: "Meilleur moment",
-                          value: "Tôt le matin",
+                          label: "Best time",
+                          value: "Early morning",
                         ),
                       ],
                     ),
@@ -504,7 +517,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                               ),
                               const SizedBox(width: 10),
                               const Text(
-                                "Mesures Sentinel-2 Satellite",
+                                "Sentinel-2 Satellite Measurements",
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
@@ -523,7 +536,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                                     const Icon(Icons.spa_outlined, color: primaryGreen, size: 18),
                                     const SizedBox(width: 8),
                                     Text(
-                                      "Santé des plantes (NDVI)",
+                                      "Plant health (NDVI)",
                                       style: TextStyle(
                                         color: darkText.withOpacity(0.7),
                                         fontSize: 12,
@@ -569,7 +582,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                                     const Icon(Icons.opacity, color: Colors.blue, size: 18),
                                     const SizedBox(width: 8),
                                     Text(
-                                      "Humidité du sol",
+                                      "Soil moisture",
                                       style: TextStyle(
                                         color: darkText.withOpacity(0.7),
                                         fontSize: 12,
@@ -610,7 +623,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                "Source des coefficients cultural (Kc) :",
+                                "Crop coefficient source (Kc):",
                                 style: TextStyle(
                                   color: darkText.withOpacity(0.6),
                                   fontSize: 11,
@@ -664,7 +677,7 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          "Météo utilisée",
+                          "Weather data used",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: darkText,
@@ -682,19 +695,19 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                               iconColor: Colors.orange,
                             ),
                             WeatherSmallStat(
-                              label: "Humidité",
+                              label: "Humidity",
                               value: "${humidity.toStringAsFixed(0)}%",
                               icon: Icons.water_drop_outlined,
                               iconColor: Colors.blue,
                             ),
                             WeatherSmallStat(
-                              label: "Vent",
+                              label: "Wind",
                               value: "${windSpeed.toStringAsFixed(1)} m/s",
                               icon: Icons.air,
                               iconColor: Colors.teal,
                             ),
                             WeatherSmallStat(
-                              label: "Pluie",
+                              label: "Rain",
                               value: "${rainfall.toStringAsFixed(1)} mm",
                               icon: Icons.cloudy_snowing,
                               iconColor: Colors.lightBlue,
@@ -781,8 +794,8 @@ class _AnalyseScreenState extends State<AnalyseScreen> {
                           : const Icon(Icons.water_drop),
                       label: Text(
                         generating
-                            ? "Calcul en cours..."
-                            : "Générer recommandation",
+                            ? "Calculating..."
+                            : "Generate recommendation",
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,

@@ -4,6 +4,7 @@ import '../constants/app_colors.dart';
 import '../models/plot.dart';
 import '../services/api_services.dart';
 import '../widgets/field_list_card.dart';
+import '../widgets/notification_bell.dart';
 import 'add_field_screen.dart';
 import 'field_details_screen.dart';
 
@@ -48,7 +49,7 @@ class _FieldsScreenState extends State<FieldsScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur chargement parcelles: $error")),
+        SnackBar(content: Text("Error loading plots: $error")),
       );
     }
   }
@@ -157,7 +158,7 @@ class _FieldsScreenState extends State<FieldsScreen> {
                       ),
                       const Spacer(),
                       const Text(
-                        "Mes Parcelles",
+                        "My Plots",
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -165,7 +166,7 @@ class _FieldsScreenState extends State<FieldsScreen> {
                         ),
                       ),
                       const Spacer(),
-                      const Icon(Icons.notifications_none, color: Colors.white),
+                      const NotificationBell(),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -182,7 +183,7 @@ class _FieldsScreenState extends State<FieldsScreen> {
                       cursorColor: Colors.white,
                       decoration: const InputDecoration(
                         icon: Icon(Icons.search, color: Colors.white),
-                        hintText: "Rechercher une parcelle...",
+                        hintText: "Search for a plot...",
                         hintStyle: TextStyle(color: Colors.white70),
                         border: InputBorder.none,
                       ),
@@ -226,13 +227,13 @@ class _FieldsScreenState extends State<FieldsScreen> {
                                 children: [
                                   _buildSummaryStat(
                                     Icons.grid_view_rounded,
-                                    "Parcelles",
+                                    "Plots",
                                     "$plotCount",
                                   ),
                                   Container(width: 1, height: 36, color: Colors.black12),
                                   _buildSummaryStat(
                                     Icons.landscape_rounded,
-                                    "Superficie totale",
+                                    "Total Area",
                                     "${totalArea.toStringAsFixed(1)} ha",
                                   ),
                                 ],
@@ -254,8 +255,8 @@ class _FieldsScreenState extends State<FieldsScreen> {
                                   const SizedBox(height: 14),
                                   Text(
                                     plots.isEmpty 
-                                        ? "Vous n'avez pas encore de parcelles." 
-                                        : "Aucune parcelle ne correspond.",
+                                        ? "You don't have any plots yet." 
+                                        : "No matching plots found.",
                                     style: const TextStyle(
                                       color: Colors.black54,
                                       fontWeight: FontWeight.bold,
@@ -264,8 +265,8 @@ class _FieldsScreenState extends State<FieldsScreen> {
                                   const SizedBox(height: 8),
                                   Text(
                                     plots.isEmpty 
-                                        ? "Ajoutez votre première parcelle pour commencer l'irrigation intelligente." 
-                                        : "Essayez avec d'autres termes de recherche.",
+                                        ? "Add your first plot to start smart irrigation." 
+                                        : "Try searching with other terms.",
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
                                       color: Colors.black38,
@@ -284,7 +285,7 @@ class _FieldsScreenState extends State<FieldsScreen> {
                                         ),
                                       ),
                                       icon: const Icon(Icons.add),
-                                      label: const Text("Ajouter une parcelle"),
+                                      label: const Text("Add a Plot"),
                                     ),
                                   ],
                                 ],
@@ -292,7 +293,7 @@ class _FieldsScreenState extends State<FieldsScreen> {
                             ),
                           ] else ...[
                             const Text(
-                              "Mes parcelles",
+                              "My plots",
                               style: TextStyle(
                                 color: darkText,
                                 fontSize: 18,
@@ -303,23 +304,25 @@ class _FieldsScreenState extends State<FieldsScreen> {
                             ...filteredPlots.map((plot) {
                               return FieldListCard(
                                 title: plot.nom,
-                                crop: plot.crop?.nom ?? "Culture",
+                                crop: plot.crop?.nom ?? "Crop",
                                 surface: "${plot.superficie} ha",
                                 soil: plot.typeSol,
                                 icon: Icons.grass,
-                                onTap: () {
-                                  Navigator.push(
+                                onTap: () async {
+                                  final refresh = await Navigator.push<bool>(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => FieldDetailsScreen(
-                                        title: plot.nom,
-                                        crop: plot.crop?.nom ?? "Culture",
-                                        surface: "${plot.superficie} ha",
-                                        soil: plot.typeSol,
-                                        location: plot.localisation,
+                                        plot: plot,
                                       ),
                                     ),
                                   );
+                                  if (refresh == true) {
+                                    setState(() {
+                                      loading = true;
+                                    });
+                                    await loadPlots();
+                                  }
                                 },
                               );
                             }),

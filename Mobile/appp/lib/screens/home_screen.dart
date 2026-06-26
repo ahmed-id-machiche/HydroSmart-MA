@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 import '../constants/app_colors.dart';
 import '../models/plot.dart';
@@ -8,6 +10,8 @@ import '../services/api_services.dart';
 import '../state/selected_location.dart';
 import '../widgets/field_card.dart';
 import '../widgets/weather_mini_item.dart';
+import '../widgets/notification_bell.dart';
+import '../services/notification_storage.dart';
 import 'chatbot_screen.dart';
 import 'map_picker_screen.dart';
 
@@ -26,10 +30,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool loadingWeather = true;
   bool loadingFields = true;
+  bool loadingRecs = true;
 
   List<Plot> plots = [];
+  List<Map<String, dynamic>> recommendations = [];
+  List<String> readIds = [];
 
-  String locationName = "Localisation...";
+  String locationName = "Location...";
   double temperature = 0;
   double humidity = 0;
   double windSpeed = 0;
@@ -41,6 +48,26 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     loadCurrentWeather();
     loadFields();
+    loadRecommendations();
+  }
+
+  Future<void> loadRecommendations() async {
+    try {
+      final recData = await ApiService.getRecommendations();
+      final readData = await NotificationStorage.getReadIds();
+      if (!mounted) return;
+      setState(() {
+        recommendations = recData;
+        readIds = readData;
+        loadingRecs = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          loadingRecs = false;
+        });
+      }
+    }
   }
 
   Future<void> loadFields() async {
@@ -61,9 +88,91 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur chargement parcelles: $error")),
+        SnackBar(content: Text("Error loading plots: $error")),
       );
     }
+  }
+
+  Future<Position?> _getIPLocation() async {
+    final headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    };
+
+    // 1. Try freeipapi.com (HTTPS, very reliable, no keys needed)
+    try {
+      final response = await http.get(Uri.parse("https://freeipapi.com/api/json"), headers: headers).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final double lat = double.parse(data["latitude"].toString());
+        final double lon = double.parse(data["longitude"].toString());
+        return _createPosition(lat, lon);
+      }
+    } catch (e) {
+      print("freeipapi.com failed: $e");
+    }
+
+    // 2. Try ipapi.co (HTTPS)
+    try {
+      final response = await http.get(Uri.parse("https://ipapi.co/json/"), headers: headers).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final double lat = double.parse(data["latitude"].toString());
+        final double lon = double.parse(data["longitude"].toString());
+        return _createPosition(lat, lon);
+      }
+    } catch (e) {
+      print("ipapi.co failed: $e");
+    }
+
+    // 3. Try ipinfo.io (HTTPS)
+    try {
+      final response = await http.get(Uri.parse("https://ipinfo.io/json"), headers: headers).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data["loc"] != null) {
+          final parts = data["loc"].toString().split(',');
+          if (parts.length == 2) {
+            final double lat = double.parse(parts[0]);
+            final double lon = double.parse(parts[1]);
+            return _createPosition(lat, lon);
+          }
+        }
+      }
+    } catch (e) {
+      print("ipinfo.io failed: $e");
+    }
+
+    // 4. Try ip-api.com (HTTP) as last resort
+    try {
+      final response = await http.get(Uri.parse("http://ip-api.com/json"), headers: headers).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data["status"] == "success") {
+          final double lat = double.parse(data["lat"].toString());
+          final double lon = double.parse(data["lon"].toString());
+          return _createPosition(lat, lon);
+        }
+      }
+    } catch (e) {
+      print("ip-api.com failed: $e");
+    }
+
+    return null;
+  }
+
+  Position _createPosition(double lat, double lon) {
+    return Position(
+      latitude: lat,
+      longitude: lon,
+      timestamp: DateTime.now(),
+      accuracy: 100,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
   }
 
   Future<void> loadCurrentWeather() async {
@@ -72,7 +181,67 @@ class _HomeScreenState extends State<HomeScreen> {
         loadingWeather = true;
       });
 
-      final position = await getCurrentPosition();
+      // 1. Try loading previously saved location first
+      await SelectedLocation.load();
+      if (SelectedLocation.hasLocation) {
+        await loadWeatherByCoordinates(
+          lat: SelectedLocation.latitude!,
+          lon: SelectedLocation.longitude!,
+        );
+        return;
+      }
+
+      // 2. Try loading from database plots next
+      List<Plot> dbPlots = [];
+      try {
+        dbPlots = await ApiService.getPlots();
+      } catch (_) {}
+
+      if (dbPlots.isNotEmpty) {
+        final firstPlot = dbPlots.first;
+        if (firstPlot.latitude != null && firstPlot.longitude != null) {
+          await loadWeatherByCoordinates(
+            lat: firstPlot.latitude!,
+            lon: firstPlot.longitude!,
+          );
+          return;
+        }
+      }
+
+      // 3. Try loading from farmer profile region
+      Map<String, dynamic>? profile;
+      try {
+        profile = await ApiService.getFarmerProfile();
+      } catch (_) {}
+
+      if (profile != null && profile["region"] != null && profile["region"].toString().trim().isNotEmpty) {
+        final regionName = profile["region"].toString().trim();
+        try {
+          final locations = await locationFromAddress(regionName);
+          if (locations.isNotEmpty) {
+            await loadWeatherByCoordinates(
+              lat: locations.first.latitude,
+              lon: locations.first.longitude,
+            );
+            return;
+          }
+        } catch (e) {
+          print("Failed to geocode profile region '$regionName': $e");
+        }
+      }
+
+      // 4. Fallback to GPS / IP auto-detection
+      Position? position;
+      try {
+        position = await getCurrentPosition();
+      } catch (gpsError) {
+        print("GPS location detection failed, falling back to IP: $gpsError");
+        position = await _getIPLocation();
+      }
+
+      if (position == null) {
+        throw Exception("Could not retrieve GPS or IP location.");
+      }
 
       await loadWeatherByCoordinates(
         lat: position.latitude,
@@ -83,11 +252,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         loadingWeather = false;
-        locationName = "Position indisponible";
+        locationName = "Location unavailable";
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur météo: $error")),
+        SnackBar(content: Text("Weather error: $error")),
       );
     }
   }
@@ -99,7 +268,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       setState(() {
         loadingWeather = true;
-        locationName = "Chargement localisation...";
+        locationName = "Loading location...";
       });
 
       final placeName = await getPlaceName(lat, lon);
@@ -109,6 +278,12 @@ class _HomeScreenState extends State<HomeScreen> {
         lon: lon,
         locationName: placeName,
       );
+
+      try {
+        await ApiService.updateFarmerProfile(region: placeName);
+      } catch (profileError) {
+        print("Failed to sync farmer region to database: $profileError");
+      }
 
       final weather = await ApiService.fetchOpenWeather(
         lat: lat,
@@ -133,11 +308,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         loadingWeather = false;
-        locationName = "Maroc";
+        locationName = "Morocco";
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur météo: $error")),
+        SnackBar(content: Text("Weather error: $error")),
       );
     }
   }
@@ -146,7 +321,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final result = await Navigator.push<MapPickerResult>(
       context,
       MaterialPageRoute(
-        builder: (_) => const MapPickerScreen(),
+        builder: (_) => MapPickerScreen(
+          initialLat: SelectedLocation.latitude ?? 31.7917,
+          initialLon: SelectedLocation.longitude ?? -7.0926,
+        ),
       ),
     );
 
@@ -171,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
     if (!serviceEnabled) {
-      throw Exception("Le service GPS est désactivé.");
+      throw Exception("GPS service is disabled.");
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
@@ -181,18 +359,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (permission == LocationPermission.denied) {
-      throw Exception("Permission GPS refusée.");
+      throw Exception("GPS permission denied.");
     }
 
     if (permission == LocationPermission.deniedForever) {
       throw Exception(
-        "Permission GPS refusée définitivement. Active-la dans les paramètres.",
+        "GPS permission permanently denied. Enable it in settings.",
       );
     }
 
-    return Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 6),
+      );
+    } catch (e) {
+      print("GPS getCurrentPosition failed: $e. Trying last known.");
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        return lastKnown;
+      }
+      rethrow;
+    }
   }
 
   Future<String> getPlaceName(double lat, double lon) async {
@@ -200,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final places = await placemarkFromCoordinates(lat, lon);
 
       if (places.isEmpty) {
-        return "Maroc";
+        return "Morocco";
       }
 
       final place = places.first;
@@ -234,9 +422,9 @@ class _HomeScreenState extends State<HomeScreen> {
         return country;
       }
 
-      return "Maroc";
+      return "Morocco";
     } catch (_) {
-      return "Maroc";
+      return "Morocco";
     }
   }
 
@@ -244,18 +432,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
 
     const months = [
-      "Janvier",
-      "Février",
-      "Mars",
-      "Avril",
-      "Mai",
-      "Juin",
-      "Juillet",
-      "Août",
-      "Septembre",
-      "Octobre",
-      "Novembre",
-      "Décembre",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
     ];
 
     return "${now.day} ${months[now.month - 1]} ${now.year}";
@@ -264,6 +452,74 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> refreshHome() async {
     await loadCurrentWeather();
     await loadFields();
+    await loadRecommendations();
+  }
+
+  Widget _buildIrrigationAlertBanner(Map<String, dynamic> alertRec) {
+    final plot = alertRec["plots"] != null ? Map<String, dynamic>.from(alertRec["plots"]) : null;
+    final plotName = plot != null ? plot["nom"]?.toString() ?? "Plot" : "Plot";
+    final vol = double.tryParse(alertRec["quantite_eau"].toString()) ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE0F2FE), Color(0xFFBAE6FD)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.lightBlue.shade200, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.blue.shade100,
+            child: const Icon(Icons.water_drop, color: Colors.blue),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Irrigation Alert",
+                  style: TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "It's time to irrigate $plotName. Recommended: ${vol.toStringAsFixed(1)} m³.",
+                  style: const TextStyle(
+                    color: darkText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.check_circle_outline, color: Colors.blue),
+            onPressed: () async {
+              await NotificationStorage.markAsRead(alertRec["id"].toString());
+              loadRecommendations();
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -288,11 +544,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.arrow_back, color: Colors.white),
-                          Spacer(),
-                          Text(
+                          const Icon(Icons.arrow_back, color: Colors.white),
+                          const Spacer(),
+                          const Text(
                             "Home",
                             style: TextStyle(
                               color: Colors.white,
@@ -300,8 +556,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Spacer(),
-                          Icon(Icons.notifications_none, color: Colors.white),
+                          const Spacer(),
+                          NotificationBell(key: UniqueKey()),
                         ],
                       ),
                       const SizedBox(height: 22),
@@ -345,6 +601,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: ListView(
                       padding: const EdgeInsets.all(20),
                       children: [
+                        if (recommendations.isNotEmpty) ...[
+                          () {
+                            final today = DateTime.now().toIso8601String().split("T")[0];
+                            final alertRecs = recommendations.where((rec) {
+                              final recId = rec["id"].toString();
+                              final date = rec["date"]?.toString() ?? "";
+                              final vol = double.tryParse(rec["quantite_eau"].toString()) ?? 0;
+                              return date == today && vol > 0 && !readIds.contains(recId);
+                            }).toList();
+
+                            if (alertRecs.isNotEmpty) {
+                              return _buildIrrigationAlertBanner(alertRecs.first);
+                            }
+                            return const SizedBox.shrink();
+                          }(),
+                        ],
                         Container(
                           padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
@@ -401,7 +673,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 ),
                                                 SizedBox(width: 4),
                                                 Text(
-                                                  "Changer",
+                                                  "Change",
                                                   style: TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 11,
@@ -472,8 +744,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const SizedBox(height: 18),
                                     Text(
                                       precipitation > 0
-                                          ? "Pluie détectée, l’irrigation peut être réduite."
-                                          : "Aujourd’hui est adapté pour surveiller l’irrigation.",
+                                          ? "Rain detected, irrigation can be reduced."
+                                          : "Today is suitable for monitoring irrigation.",
                                       textAlign: TextAlign.center,
                                       style:
                                           const TextStyle(color: Colors.white),
@@ -518,7 +790,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             child: const Center(
                               child: Text(
-                                "Aucune parcelle trouvée.",
+                                "No plots found.",
                                 style: TextStyle(color: Colors.black54),
                               ),
                             ),
@@ -535,7 +807,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   child: FieldCard(
                                     label: plot.nom,
-                                    cropName: plot.crop?.nom ?? "Culture",
+                                    cropName: plot.crop?.nom ?? "Crop",
                                   ),
                                 ),
                               );

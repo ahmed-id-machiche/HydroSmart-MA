@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/app_colors.dart';
 import '../services/pref_service.dart';
+import '../state/selected_location.dart';
 import 'main_navigation.dart';
 import 'sign_in_screen.dart';
 
@@ -36,6 +37,7 @@ class _SplashScreenState extends State<SplashScreen> {
       );
     } else {
       try {
+        await SelectedLocation.clear();
         await Supabase.instance.client.auth.signOut();
       } catch (_) {}
 
@@ -79,7 +81,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 6),
             const Text(
-              "Optimisation de l'irrigation de précision",
+              "Precision Irrigation Optimization",
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 13,

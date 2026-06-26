@@ -21,4 +21,24 @@ class PrefService {
     } catch (_) {}
     return true; // Default to true
   }
+
+  static Future<void> setNotificationsEnabled(bool value) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/notifications_enabled.txt');
+      await file.writeAsString(value ? 'true' : 'false');
+    } catch (_) {}
+  }
+
+  static Future<bool> getNotificationsEnabled() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/notifications_enabled.txt');
+      if (await file.exists()) {
+        final val = await file.readAsString();
+        return val.trim() == 'true';
+      }
+    } catch (_) {}
+    return true; // Default to true
+  }
 }

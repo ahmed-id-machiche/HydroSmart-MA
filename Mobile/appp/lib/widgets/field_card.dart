@@ -26,6 +26,27 @@ class FieldCard extends StatelessWidget {
       return "assets/images/potato.png";
     } else if (lower.contains("banan") || lower.contains("bananier")) {
       return "assets/images/banana.png";
+    } else if (lower.contains("pommier") || lower.contains("apple")) {
+      return "assets/images/apple.png";
+    } else if (lower.contains("avocat") || lower.contains("avocado")) {
+      return "assets/images/avocado.png";
+    } else if (lower.contains("vigne") || lower.contains("grape")) {
+      return "assets/images/grape.png";
+    } else if (lower.contains("pasteque") || lower.contains("watermelon")) {
+      return "assets/images/watermelon.png";
+    } else if (lower.contains("carotte") || lower.contains("carrot")) {
+      return "assets/images/carrot.png";
+    } else if (lower.contains("menthe") || lower.contains("mint")) {
+      return "assets/images/mint.png";
+    } else if (lower.contains("luzerne") || lower.contains("alfalfa")) {
+      return "assets/images/alfalfa.png";
+    } else if (lower.contains("poivron") || lower.contains("pepper")) {
+      return "assets/images/pepper.png";
+    } else if (lower.contains("poirier") || lower.contains("pear") ||
+               lower.contains("grenadier") || lower.contains("pomegranate") ||
+               lower.contains("figuier") || lower.contains("fig") ||
+               lower.contains("amandier") || lower.contains("almond")) {
+      return "assets/images/citrus.png"; // Fallback tree image
     }
     return "assets/images/default.png";
   }

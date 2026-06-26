@@ -13,7 +13,7 @@ class ApiService {
     final user = Supabase.instance.client.auth.currentUser;
 
     if (user == null) {
-      throw Exception("Utilisateur non connecté.");
+      throw Exception("User not logged in.");
     }
 
     return user.id;
@@ -71,7 +71,7 @@ class ApiService {
           "role": "farmer",
         };
       }
-      throw Exception("Aucun profil trouvé.");
+      throw Exception("No profile found.");
     }
     return Map<String, dynamic>.from(data.first);
   }
@@ -223,6 +223,7 @@ class ApiService {
     required String typeSol,
     double? latitude,
     double? longitude,
+    String? customCropName,
   }) async {
     final userId = getCurrentUserId();
 
@@ -240,11 +241,56 @@ class ApiService {
         "typeSol": typeSol,
         "latitude": latitude,
         "longitude": longitude,
+        if (customCropName != null) "customCropName": customCropName,
       }),
     );
 
     if (response.statusCode != 201) {
       throw Exception("Failed to add plot: ${response.body}");
+    }
+  }
+
+  static Future<void> updatePlot({
+    required String id,
+    required String cropId,
+    required String nom,
+    required double superficie,
+    required String localisation,
+    required String typeSol,
+    double? latitude,
+    double? longitude,
+    String? customCropName,
+  }) async {
+    final response = await http.patch(
+      Uri.parse("${ApiConfig.baseUrl}/api/plots"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "id": id,
+        "cropId": cropId,
+        "nom": nom,
+        "superficie": superficie,
+        "localisation": localisation,
+        "typeSol": typeSol,
+        "latitude": latitude,
+        "longitude": longitude,
+        if (customCropName != null) "customCropName": customCropName,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to update plot: ${response.body}");
+    }
+  }
+
+  static Future<void> deletePlot(String id) async {
+    final response = await http.delete(
+      Uri.parse("${ApiConfig.baseUrl}/api/plots?id=$id"),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to delete plot: ${response.body}");
     }
   }
 
@@ -402,12 +448,12 @@ class ApiService {
     Plot plot,
   ) async {
     if (plot.crop == null) {
-      throw Exception("Cette parcelle n'a pas de culture associée.");
+      throw Exception("This plot has no associated crop.");
     }
 
     if (plot.latitude == null || plot.longitude == null) {
       throw Exception(
-        "Cette parcelle n'a pas de localisation GPS. Modifie ou recrée cette parcelle avec une localisation sur la carte.",
+        "This plot does not have a GPS location. Edit or recreate this plot with a location on the map.",
       );
     }
 
@@ -454,14 +500,14 @@ class ApiService {
     final grossNeed =
         double.tryParse(recommendation["grossNeedMm"].toString()) ?? 0;
     final message = recommendation["message"]?.toString() ??
-        "Recommandation générée avec succès.";
+        "Recommendation generated successfully.";
     final today = DateTime.now().toIso8601String().split("T")[0];
 
     // Retrieve dynamically calculated duration and frequency from the API response
     final durationHours =
         double.tryParse(recommendation["dureeIrrigation"].toString()) ?? (volumeM3 > 0 ? 2.0 : 0.0);
     final frequencyText =
-        recommendation["frequence"]?.toString() ?? (volumeM3 > 0 ? "journalière" : "aucune");
+        recommendation["frequence"]?.toString() ?? (volumeM3 > 0 ? "daily" : "none");
 
     final savedRecommendation = await saveIrrigationRecommendation(
       plotId: plot.id,
@@ -512,10 +558,10 @@ class ApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception("Erreur de communication avec l'assistant.");
+      throw Exception("Error communicating with the assistant.");
     }
 
     final data = jsonDecode(response.body);
-    return data["reply"]?.toString() ?? "Pas de réponse.";
+    return data["reply"]?.toString() ?? "No response.";
   }
 }
